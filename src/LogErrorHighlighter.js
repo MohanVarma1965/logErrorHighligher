@@ -7,7 +7,10 @@ function LogErrorHighlighter() {
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(false);
 
-  const colors = ["#ffcccc", "#ffeb99", "#cce5ff", "#d9ccff"];
+  const colors = {
+    error: "#ffcccc", // Light red for errors
+    warning: "#ffeb99", // Light orange for warnings
+  };
 
   const handleFileUpload = (event) => {
     setLoading(true); // Show spinner
@@ -16,39 +19,43 @@ function LogErrorHighlighter() {
     reader.onload = (e) => {
       const content = e.target.result;
       const lines = content.split("\n");
-      const parsedLogs = lines.map((line, index) => ({
-        line,
-        index,
-        highlight: false,
-        color: null,
-      }));
+      const parsedLogs = lines.map((line, index) => {
+        let highlight = false;
+        let color = null;
 
+        if (line.includes("Error")) {
+          highlight = true;
+          color = colors.error;
+        } else if (line.includes("Warning")) {
+          highlight = true;
+          color = colors.warning;
+        }
+
+        return {
+          line,
+          index,
+          highlight,
+          color,
+        };
+      });
+
+      // Group consecutive lines of warnings/errors into sections
       let errorSections = [];
       let colorIndex = 0;
 
       parsedLogs.forEach((log, i) => {
-        if (log.line.includes("Error")) {
-          const currentColor = colors[colorIndex % colors.length];
-
+        if (log.highlight && log.color === colors.error) {
           // Highlight the error line and the next two lines with the current color
-          log.highlight = true;
+          const currentColor = colors.error;
           log.color = currentColor;
-          if (parsedLogs[i + 1]) {
-            parsedLogs[i + 1].highlight = true;
-            parsedLogs[i + 1].color = currentColor;
-          }
-          if (parsedLogs[i + 2]) {
-            parsedLogs[i + 2].highlight = true;
-            parsedLogs[i + 2].color = currentColor;
-          }
+          if (parsedLogs[i + 1]) parsedLogs[i + 1].highlight = true;
+          if (parsedLogs[i + 2]) parsedLogs[i + 2].highlight = true;
 
-          // Save the error section with the color
           errorSections.push([
             { ...log },
             parsedLogs[i + 1] ? { ...parsedLogs[i + 1] } : null,
             parsedLogs[i + 2] ? { ...parsedLogs[i + 2] } : null,
           ]);
-
           colorIndex++;
         }
       });
@@ -96,7 +103,8 @@ function LogErrorHighlighter() {
     setFilter(event.target.value);
   };
 
-  const filteredLogs = filter === "Errors Only" ? logs.filter((log) => log.highlight) : logs;
+  const filteredLogs =
+    filter === "Errors Only" ? logs.filter((log) => log.highlight && log.color === colors.error) : logs;
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
@@ -106,6 +114,7 @@ function LogErrorHighlighter() {
       <select onChange={handleFilterChange} value={filter} style={styles.dropdown}>
         <option value="All">All</option>
         <option value="Errors Only">Errors Only</option>
+        <option value="Warnings Only">Warnings Only</option>
       </select>
 
       <div />
