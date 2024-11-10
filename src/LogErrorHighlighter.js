@@ -15,38 +15,24 @@ function LogErrorHighlighter() {
   const handleFileUpload = (event) => {
     setLoading(true);
     const file = event.target.files[0];
-    const stream = file.stream();
-    const reader = stream.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
-    let parsedLogs = [];
+    const reader = new FileReader();
 
-    function processChunk({ done, value }) {
-      if (done) {
-        setLogs(parsedLogs);
-        setLoading(false);
-        return;
-      }
+    reader.onload = (e) => {
+      const content = e.target.result;
+      const lines = content.split("\n");
 
-      buffer += decoder.decode(value, { stream: true });
-      let lines = buffer.split("\n");
+      const parsedLogs = lines.map((line, index) => ({
+        line,
+        index,
+        highlight: line.includes("Error") || line.includes("Warning"),
+        color: line.includes("Error") ? colors.error : line.includes("Warning") ? colors.warning : null,
+      }));
 
-      buffer = lines.pop(); // Keep the last, possibly incomplete line in the buffer
+      setLogs(parsedLogs);
+      setLoading(false);
+    };
 
-      parsedLogs = [
-        ...parsedLogs,
-        ...lines.map((line, index) => ({
-          line,
-          index,
-          highlight: line.includes("Error") || line.includes("Warning"),
-          color: line.includes("Error") ? colors.error : line.includes("Warning") ? colors.warning : null,
-        })),
-      ];
-
-      reader.read().then(processChunk);
-    }
-
-    reader.read().then(processChunk);
+    reader.readAsText(file);
   };
 
   const downloadFile = (filteredLogs, filename) => {
@@ -153,7 +139,6 @@ function LogErrorHighlighter() {
       {loading && <div style={styles.spinner}>🔄 Processing...</div>}
 
       <div style={styles.logPreview}>
-        <h3>Log Preview:</h3>
         <AutoSizer>
           {({ height, width }) => (
             <List
@@ -174,12 +159,12 @@ const styles = {
   container: {
     textAlign: "center",
     padding: "20px",
-    height: "900vh",
+    minHeight: "95vh", // Full viewport height
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    justifyContent: "flex-start",
     gap: "20px",
+    overflowY: "auto", // Use only one scrollbar for the page
   },
   fileInput: {
     padding: "10px",
@@ -232,8 +217,9 @@ const styles = {
   },
   logPreview: {
     flexGrow: 1,
-    width: "100%",
+    width: "95%",
     padding: "20px",
+    border: "2px solid green",
   },
 };
 
