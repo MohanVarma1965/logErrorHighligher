@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Log Error Highlighter</title>
+    <style>
+      .error {
+        background-color: #ffcccc;
+        padding: 5px;
+      }
+      .warning {
+        background-color: #ffeb99;
+        padding: 5px;
+      }
+      .log-line {
+        margin: 5px 0;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <input type="file" id="fileInput" />
+    <label for="filter">Filter Logs:</label>
+    <select id="filter">
+      <option value="All">All</option>
+      <option value="Errors Only">Errors Only</option>
+      <option value="Warnings Only">Warnings Only</option>
+      <option value="Errors and Warnings">Errors and Warnings</option>
+    </select>
+    <button id="downloadBtn">Download Highlighted Log (HTML)</button>
+    <div id="logContainer">
+      <h3>Log Preview:</h3>
+    </div>
+
+    <script>
+      const logContainer = document.getElementById("logContainer");
+      const fileInput = document.getElementById("fileInput");
+      const filterSelect = document.getElementById("filter");
+      const downloadBtn = document.getElementById("downloadBtn");
+      let logs = [];
+
+      fileInput.addEventListener("change", handleFileUpload);
+      filterSelect.addEventListener("change", filterLogs);
+      downloadBtn.addEventListener("click", downloadHighlightedLog);
+
+      function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const content = e.target.result;
+            logs = content.split("\n").map((line, index) => ({
+              line,
+              highlight: line.includes("Error") || line.includes("Warning"),
+              type: line.includes("Error") ? "error" : line.includes("Warning") ? "warning" : "",
+            }));
+            displayLogs(logs);
+          };
+          reader.readAsText(file);
+        }
+      }
+
+      function displayLogs(logsToDisplay) {
+        logContainer.innerHTML = "<h3>Log Preview:</h3>";
+        logsToDisplay.forEach((log) => {
+          const logElement = document.createElement("div");
+          logElement.className = `log-line ${log.type}`;
+          logElement.innerText = log.line;
+          logContainer.appendChild(logElement);
+        });
+      }
+
+      function filterLogs() {
+        const filter = filterSelect.value;
+        const filteredLogs = logs.filter((log) => {
+          if (filter === "All") return true;
+          if (filter === "Errors Only") return log.type === "error";
+          if (filter === "Warnings Only") return log.type === "warning";
+          if (filter === "Errors and Warnings") return log.type === "error" || log.type === "warning";
+        });
+        displayLogs(filteredLogs);
+      }
+
+      function downloadHighlightedLog() {
+        const highlightedContent = logs
+          .map((log) => {
+            const color = log.type === "error" ? "#ffcccc" : log.type === "warning" ? "#ffeb99" : "transparent";
+            return `<div style="background-color: ${color}; padding: 5px;">${log.line}</div>`;
+          })
+          .join("");
+
+        const blob = new Blob([`<html><body>${highlightedContent}</body></html>`], { type: "text/html;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "highlighted_log.html";
+        link.click();
+      }
+    </script>
+  </body>
+</html>

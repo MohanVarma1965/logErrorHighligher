@@ -15,11 +15,17 @@ function LogErrorHighlighter() {
   const handleFileUpload = (event) => {
     setLoading(true); // Show spinner
     const file = event.target.files[0];
+    const chunkSize = 1024 * 1024; // Read in 1MB chunks
     const reader = new FileReader();
+    let offset = 0;
+    const parsedLogs = [];
+
     reader.onload = (e) => {
       const content = e.target.result;
       const lines = content.split("\n");
-      const parsedLogs = lines.map((line, index) => {
+
+      // Process each line in the chunk
+      lines.forEach((line, index) => {
         let highlight = false;
         let color = null;
 
@@ -31,27 +37,31 @@ function LogErrorHighlighter() {
           color = colors.warning;
         }
 
-        return {
+        parsedLogs.push({
           line,
-          index,
+          index: offset + index,
           highlight,
           color,
-        };
+        });
       });
 
-      // Separate error sections for downloadErrorsWithColors functionality
-      const errorSections = parsedLogs.reduce((sections, log, i, arr) => {
-        if (log.highlight && (log.color === colors.error || log.color === colors.warning)) {
-          sections.push([log, arr[i + 1] || null, arr[i + 2] || null].filter(Boolean));
-        }
-        return sections;
-      }, []);
+      offset += lines.length;
 
-      setLogs(parsedLogs);
-      setErrors(errorSections);
-      setLoading(false); // Hide spinner
+      // Load the next chunk if available
+      if (offset < file.size) {
+        readNextChunk();
+      } else {
+        setLogs(parsedLogs);
+        setLoading(false); // Hide spinner
+      }
     };
-    reader.readAsText(file);
+
+    const readNextChunk = () => {
+      const slice = file.slice(offset, offset + chunkSize);
+      reader.readAsText(slice);
+    };
+
+    readNextChunk();
   };
 
   const downloadHighlightedFile = () => {
@@ -71,10 +81,9 @@ function LogErrorHighlighter() {
   };
 
   const downloadErrorsWithColors = () => {
-    const errorText = errors
-      .map((section) =>
-        section.map((line) => `<div style="background-color: ${line.color}; padding: 5px;">${line.line}</div>`).join("")
-      )
+    const errorText = logs
+      .filter((log) => log.highlight)
+      .map((log) => `<div style="background-color: ${log.color}; padding: 5px;">${log.line}</div>`)
       .join("<br /><br />");
 
     const blob = new Blob([`<html><body>${errorText}</body></html>`], {
@@ -87,7 +96,6 @@ function LogErrorHighlighter() {
     setFilter(event.target.value);
   };
 
-  // Filter logic based on the selected filter option
   const filteredLogs = logs.filter((log) => {
     if (filter === "All") return true;
     if (filter === "Errors Only") return log.highlight && log.color === colors.error;
