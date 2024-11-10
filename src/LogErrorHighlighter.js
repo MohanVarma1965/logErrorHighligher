@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useRef } from "react";
 import { saveAs } from "file-saver";
-import { FixedSizeList as List } from "react-window"; // For virtualized rendering
+import { VariableSizeList as List } from "react-window"; // For variable-sized rows
 
 function LogErrorHighlighter() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("All");
+  const listRef = useRef(null);
 
   const colors = {
     error: "#ffcccc", // Light red for errors
@@ -49,8 +50,8 @@ function LogErrorHighlighter() {
     reader.read().then(processChunk);
   };
 
-  const downloadHighlightedFile = () => {
-    const highlightedText = logs
+  const downloadFile = (filteredLogs, filename) => {
+    const fileContent = filteredLogs
       .map((log) => {
         if (log.highlight) {
           return `<div style="background-color: ${log.color}; padding: 5px;">${log.line}</div>`;
@@ -59,27 +60,34 @@ function LogErrorHighlighter() {
       })
       .join("");
 
-    const blob = new Blob([`<html><body>${highlightedText}</body></html>`], {
+    const blob = new Blob([`<html><body>${fileContent}</body></html>`], {
       type: "text/html;charset=utf-8",
     });
-    saveAs(blob, "highlighted_log.html");
+    saveAs(blob, filename);
   };
 
   const filteredLogs = logs.filter((log) => {
     if (filter === "All") return true;
     if (filter === "Errors Only") return log.highlight && log.color === colors.error;
     if (filter === "Warnings Only") return log.highlight && log.color === colors.warning;
+    if (filter === "Errors and Warnings")
+      return log.highlight && (log.color === colors.error || log.color === colors.warning);
     return false;
   });
+
+  // Adjusts each row height based on the content length
+  const getItemSize = (index) => {
+    const lineLength = filteredLogs[index].line.length;
+    return Math.max(40, Math.ceil(lineLength / 100) * 20); // Dynamically adjust height
+  };
 
   const Row = ({ index, style }) => (
     <div
       style={{
         ...style,
         backgroundColor: filteredLogs[index].highlight ? filteredLogs[index].color : "transparent",
-        padding: "5px",
+        padding: "10px",
         borderRadius: "5px",
-        margin: "5px 0",
       }}
     >
       {filteredLogs[index].line}
@@ -87,28 +95,70 @@ function LogErrorHighlighter() {
   );
 
   return (
-    <div style={{ textAlign: "center", padding: "20px" }}>
+    <div style={styles.container}>
       <input type="file" onChange={handleFileUpload} style={styles.fileInput} />
 
-      <label style={styles.label}>Filter Logs: </label>
-      <select onChange={(e) => setFilter(e.target.value)} value={filter} style={styles.dropdown}>
-        <option value="All">All</option>
-        <option value="Errors Only">Errors Only</option>
-        <option value="Warnings Only">Warnings Only</option>
-      </select>
+      <div style={styles.controls}>
+        <button
+          onClick={() => downloadFile(filteredLogs, "highlighted_log.html")}
+          style={{ ...styles.button, ...styles.buttonPrimary }}
+        >
+          Download Highlighted Log (HTML)
+        </button>
+        <button
+          onClick={() =>
+            downloadFile(
+              logs.filter((log) => log.color === colors.error),
+              "errors_only.html"
+            )
+          }
+          style={{ ...styles.button, ...styles.buttonError }}
+        >
+          Download Errors Only
+        </button>
+        <button
+          onClick={() =>
+            downloadFile(
+              logs.filter((log) => log.color === colors.warning),
+              "warnings_only.html"
+            )
+          }
+          style={{ ...styles.button, ...styles.buttonWarning }}
+        >
+          Download Warnings Only
+        </button>
+        <button
+          onClick={() =>
+            downloadFile(
+              logs.filter((log) => log.color),
+              "errors_and_warnings.html"
+            )
+          }
+          style={{ ...styles.button, ...styles.buttonBoth }}
+        >
+          Download Errors & Warnings
+        </button>
+      </div>
 
-      <button onClick={downloadHighlightedFile} style={{ ...styles.button, ...styles.buttonPrimary }}>
-        Download Highlighted Log (HTML)
-      </button>
+      <div style={styles.filterContainer}>
+        <label style={styles.label}>Filter Logs:</label>
+        <select onChange={(e) => setFilter(e.target.value)} value={filter} style={styles.dropdown}>
+          <option value="All">All</option>
+          <option value="Errors Only">Errors Only</option>
+          <option value="Warnings Only">Warnings Only</option>
+          <option value="Errors and Warnings">Errors and Warnings</option>
+        </select>
+      </div>
 
       {loading && <div style={styles.spinner}>🔄 Processing...</div>}
 
-      <div style={{ margin: "20px 0", height: "400px", width: "100%" }}>
+      <div style={styles.logPreview}>
         <h3>Log Preview:</h3>
         <List
-          height={400}
+          ref={listRef}
+          height={window.innerHeight - 250} // Adjust height dynamically to occupy available space
           itemCount={filteredLogs.length}
-          itemSize={35} // Height of each row
+          itemSize={getItemSize} // Dynamic height
           width={"100%"}
         >
           {Row}
@@ -119,30 +169,45 @@ function LogErrorHighlighter() {
 }
 
 const styles = {
+  container: {
+    textAlign: "center",
+    padding: "20px",
+    height: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: "20px",
+  },
   fileInput: {
-    marginBottom: "20px",
     padding: "10px",
     borderRadius: "5px",
     border: "1px solid #ddd",
   },
+  controls: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: "10px", // Space between buttons
+  },
   label: {
-    marginRight: "10px",
     fontWeight: "bold",
+  },
+  filterContainer: {
+    marginBottom: "20px",
   },
   dropdown: {
     padding: "8px",
     borderRadius: "5px",
     border: "1px solid #ddd",
-    marginBottom: "20px",
   },
   spinner: {
-    margin: "20px",
     fontSize: "18px",
     fontWeight: "bold",
     color: "#555",
+    marginBottom: "20px",
   },
   button: {
-    margin: "10px",
     padding: "10px 20px",
     border: "none",
     borderRadius: "5px",
@@ -154,8 +219,22 @@ const styles = {
   buttonPrimary: {
     backgroundColor: "#4CAF50", // Green color for primary button
   },
-  buttonSecondary: {
-    backgroundColor: "#FF5733", // Orange color for secondary button
+  buttonError: {
+    backgroundColor: "#FF5733", // Red color for errors button
+  },
+  buttonWarning: {
+    backgroundColor: "#FFC300", // Yellow color for warnings button
+  },
+  buttonBoth: {
+    backgroundColor: "#8E44AD", // Purple color for errors & warnings button
+  },
+  logPreview: {
+    flexGrow: 1,
+    width: "100%",
+    border: "1px solid #ddd",
+    borderRadius: "8px",
+    padding: "20px",
+    overflow: "auto",
   },
 };
 
