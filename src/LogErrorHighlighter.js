@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { saveAs } from "file-saver";
+import { FixedSizeList as List } from "react-window"; // For virtualized rendering
 
 function LogErrorHighlighter() {
   const [logs, setLogs] = useState([]);
-  const [errors, setErrors] = useState([]);
-  const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("All");
 
   const colors = {
     error: "#ffcccc", // Light red for errors
@@ -13,55 +13,40 @@ function LogErrorHighlighter() {
   };
 
   const handleFileUpload = (event) => {
-    setLoading(true); // Show spinner
+    setLoading(true);
     const file = event.target.files[0];
-    const chunkSize = 1024 * 1024; // Read in 1MB chunks
-    const reader = new FileReader();
-    let offset = 0;
-    const parsedLogs = [];
+    const stream = file.stream();
+    const reader = stream.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let parsedLogs = [];
 
-    reader.onload = (e) => {
-      const content = e.target.result;
-      const lines = content.split("\n");
-
-      // Process each line in the chunk
-      lines.forEach((line, index) => {
-        let highlight = false;
-        let color = null;
-
-        if (line.includes("Error")) {
-          highlight = true;
-          color = colors.error;
-        } else if (line.includes("Warning")) {
-          highlight = true;
-          color = colors.warning;
-        }
-
-        parsedLogs.push({
-          line,
-          index: offset + index,
-          highlight,
-          color,
-        });
-      });
-
-      offset += lines.length;
-
-      // Load the next chunk if available
-      if (offset < file.size) {
-        readNextChunk();
-      } else {
+    function processChunk({ done, value }) {
+      if (done) {
         setLogs(parsedLogs);
-        setLoading(false); // Hide spinner
+        setLoading(false);
+        return;
       }
-    };
 
-    const readNextChunk = () => {
-      const slice = file.slice(offset, offset + chunkSize);
-      reader.readAsText(slice);
-    };
+      buffer += decoder.decode(value, { stream: true });
+      let lines = buffer.split("\n");
 
-    readNextChunk();
+      buffer = lines.pop(); // Keep the last, possibly incomplete line in the buffer
+
+      parsedLogs = [
+        ...parsedLogs,
+        ...lines.map((line, index) => ({
+          line,
+          index,
+          highlight: line.includes("Error") || line.includes("Warning"),
+          color: line.includes("Error") ? colors.error : line.includes("Warning") ? colors.warning : null,
+        })),
+      ];
+
+      reader.read().then(processChunk);
+    }
+
+    reader.read().then(processChunk);
   };
 
   const downloadHighlightedFile = () => {
@@ -80,69 +65,54 @@ function LogErrorHighlighter() {
     saveAs(blob, "highlighted_log.html");
   };
 
-  const downloadErrorsWithColors = () => {
-    const errorText = logs
-      .filter((log) => log.highlight)
-      .map((log) => `<div style="background-color: ${log.color}; padding: 5px;">${log.line}</div>`)
-      .join("<br /><br />");
-
-    const blob = new Blob([`<html><body>${errorText}</body></html>`], {
-      type: "text/html;charset=utf-8",
-    });
-    saveAs(blob, "colored_errors.html");
-  };
-
-  const handleFilterChange = (event) => {
-    setFilter(event.target.value);
-  };
-
   const filteredLogs = logs.filter((log) => {
     if (filter === "All") return true;
     if (filter === "Errors Only") return log.highlight && log.color === colors.error;
     if (filter === "Warnings Only") return log.highlight && log.color === colors.warning;
-    if (filter === "Errors and Warnings")
-      return log.highlight && (log.color === colors.error || log.color === colors.warning);
-    return true;
+    return false;
   });
+
+  const Row = ({ index, style }) => (
+    <div
+      style={{
+        ...style,
+        backgroundColor: filteredLogs[index].highlight ? filteredLogs[index].color : "transparent",
+        padding: "5px",
+        borderRadius: "5px",
+        margin: "5px 0",
+      }}
+    >
+      {filteredLogs[index].line}
+    </div>
+  );
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
       <input type="file" onChange={handleFileUpload} style={styles.fileInput} />
 
       <label style={styles.label}>Filter Logs: </label>
-      <select onChange={handleFilterChange} value={filter} style={styles.dropdown}>
+      <select onChange={(e) => setFilter(e.target.value)} value={filter} style={styles.dropdown}>
         <option value="All">All</option>
         <option value="Errors Only">Errors Only</option>
         <option value="Warnings Only">Warnings Only</option>
-        <option value="Errors and Warnings">Errors and Warnings</option>
       </select>
 
-      <div />
-      <button onClick={downloadHighlightedFile} style={styles.button}>
+      <button onClick={downloadHighlightedFile} style={{ ...styles.button, ...styles.buttonPrimary }}>
         Download Highlighted Log (HTML)
-      </button>
-      <div />
-      <button onClick={downloadErrorsWithColors} style={styles.button}>
-        Download Errors with Colors (HTML)
       </button>
 
       {loading && <div style={styles.spinner}>🔄 Processing...</div>}
 
-      <div>
+      <div style={{ margin: "20px 0", height: "400px", width: "100%" }}>
         <h3>Log Preview:</h3>
-        {filteredLogs.map((log) => (
-          <pre
-            key={log.index}
-            style={{
-              backgroundColor: log.highlight ? log.color : "transparent",
-              padding: "5px",
-              borderRadius: "5px",
-              margin: "5px 0",
-            }}
-          >
-            {log.line}
-          </pre>
-        ))}
+        <List
+          height={400}
+          itemCount={filteredLogs.length}
+          itemSize={35} // Height of each row
+          width={"100%"}
+        >
+          {Row}
+        </List>
       </div>
     </div>
   );
@@ -176,11 +146,16 @@ const styles = {
     padding: "10px 20px",
     border: "none",
     borderRadius: "5px",
-    backgroundColor: "#4CAF50",
     color: "white",
     fontSize: "16px",
     cursor: "pointer",
     transition: "background-color 0.3s",
+  },
+  buttonPrimary: {
+    backgroundColor: "#4CAF50", // Green color for primary button
+  },
+  buttonSecondary: {
+    backgroundColor: "#FF5733", // Orange color for secondary button
   },
 };
 
