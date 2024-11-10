@@ -157,6 +157,7 @@ function LogErrorHighlighter() {
 
 const styles = {
   container: {
+    background: "linear-gradient(to left, rgb(231 231 231), rgb(143 191 251))",
     textAlign: "center",
     padding: "20px",
     minHeight: "95vh", // Full viewport height
@@ -219,7 +220,7 @@ const styles = {
     flexGrow: 1,
     width: "95%",
     padding: "20px",
-    border: "2px solid green",
+    border: "2px dotted green",
   },
 };
 
