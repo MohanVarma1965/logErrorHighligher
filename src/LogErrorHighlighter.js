@@ -1,16 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { saveAs } from "file-saver";
-import { AutoSizer, List } from "react-virtualized"; // For auto-sizing rows
+import { AutoSizer, List } from "react-virtualized";
 
 function LogErrorHighlighter() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const colors = {
     error: "#ffcccc", // Light red for errors
     warning: "#ffeb99", // Light orange for warnings
   };
+
+  // Apply gradient background to the body
+  useEffect(() => {
+    document.body.style.background = "linear-gradient(rgb(243 213 224), rgb(253, 253, 253))";
+
+    // Cleanup to reset body background when the component unmounts
+    return () => {
+      document.body.style.background = "";
+    };
+  }, []);
 
   const handleFileUpload = (event) => {
     setLoading(true);
@@ -51,13 +62,18 @@ function LogErrorHighlighter() {
     saveAs(blob, filename);
   };
 
+  // Filter logs based on filter selection and search term
   const filteredLogs = logs.filter((log) => {
-    if (filter === "All") return true;
-    if (filter === "Errors Only") return log.highlight && log.color === colors.error;
-    if (filter === "Warnings Only") return log.highlight && log.color === colors.warning;
-    if (filter === "Errors and Warnings")
-      return log.highlight && (log.color === colors.error || log.color === colors.warning);
-    return false;
+    const matchesFilter =
+      filter === "All" ||
+      (filter === "Errors Only" && log.highlight && log.color === colors.error) ||
+      (filter === "Warnings Only" && log.highlight && log.color === colors.warning) ||
+      (filter === "Errors and Warnings" &&
+        log.highlight &&
+        (log.color === colors.error || log.color === colors.warning));
+
+    const matchesSearch = log.line.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesFilter && matchesSearch;
   });
 
   // Calculate row height dynamically based on content
@@ -74,6 +90,7 @@ function LogErrorHighlighter() {
         padding: "10px",
         borderRadius: "5px",
         boxSizing: "border-box",
+        color: "#333",
       }}
     >
       {filteredLogs[index].line}
@@ -82,6 +99,7 @@ function LogErrorHighlighter() {
 
   return (
     <div style={styles.container}>
+      <h1 style={styles.title}>Log Error Highlighter</h1>
       <input type="file" onChange={handleFileUpload} style={styles.fileInput} />
 
       <div style={styles.controls}>
@@ -126,14 +144,26 @@ function LogErrorHighlighter() {
         </button>
       </div>
 
-      <div style={styles.filterContainer}>
-        <label style={styles.label}>Filter Logs:</label>
-        <select onChange={(e) => setFilter(e.target.value)} value={filter} style={styles.dropdown}>
-          <option value="All">All</option>
-          <option value="Errors Only">Errors Only</option>
-          <option value="Warnings Only">Warnings Only</option>
-          <option value="Errors and Warnings">Errors and Warnings</option>
-        </select>
+      <div style={styles.filterSearchContainer}>
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Filter Logs:</label>
+          <select onChange={(e) => setFilter(e.target.value)} value={filter} style={styles.dropdown}>
+            <option value="All">All</option>
+            <option value="Errors Only">Errors Only</option>
+            <option value="Warnings Only">Warnings Only</option>
+            <option value="Errors and Warnings">Errors and Warnings</option>
+          </select>
+        </div>
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Search:</label>
+          <input
+            type="text"
+            placeholder="Search logs"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={styles.searchInput}
+          />
+        </div>
       </div>
 
       {loading && <div style={styles.spinner}>🔄 Processing...</div>}
@@ -145,7 +175,7 @@ function LogErrorHighlighter() {
               height={height}
               width={width}
               rowCount={filteredLogs.length}
-              rowHeight={getRowHeight} // Dynamic height for each row
+              rowHeight={getRowHeight}
               rowRenderer={({ index, key, style }) => <Row key={key} index={index} style={style} />}
             />
           )}
@@ -157,37 +187,71 @@ function LogErrorHighlighter() {
 
 const styles = {
   container: {
-    background: "linear-gradient(to left, rgb(231 231 231), rgb(143 191 251))",
+    background: "linear-gradient(rgb(182, 185, 221), rgb(253, 253, 253))",
     textAlign: "center",
-    padding: "20px",
-    minHeight: "95vh", // Full viewport height
+    padding: "10px",
+    minHeight: "95vh",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     gap: "20px",
-    overflowY: "auto", // Use only one scrollbar for the page
+    overflowY: "auto",
+  },
+  title: {
+    fontSize: "30px",
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: "10px",
   },
   fileInput: {
-    padding: "10px",
-    borderRadius: "5px",
+    padding: "10px 15px",
+    borderRadius: "10px",
     border: "1px solid #ddd",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+    transition: "box-shadow 0.3s",
+    backgroundColor: "#fff",
+    cursor: "pointer",
   },
   controls: {
     display: "flex",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: "10px", // Space between buttons
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: "10px",
   },
   label: {
     fontWeight: "bold",
+    fontSize: "16px",
+    marginRight: "8px",
   },
-  filterContainer: {
+  filterSearchContainer: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: "30px",
     marginBottom: "20px",
   },
+  inputGroup: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+  },
   dropdown: {
-    padding: "8px",
-    borderRadius: "5px",
+    padding: "10px",
+    borderRadius: "10px",
     border: "1px solid #ddd",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+    transition: "box-shadow 0.3s",
+    backgroundColor: "#fff",
+    cursor: "pointer",
+  },
+  searchInput: {
+    padding: "10px",
+    borderRadius: "10px",
+    border: "1px solid #ddd",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+    width: "200px",
+    transition: "box-shadow 0.3s",
+    backgroundColor: "#fff",
   },
   spinner: {
     fontSize: "18px",
@@ -198,29 +262,34 @@ const styles = {
   button: {
     padding: "10px 20px",
     border: "none",
-    borderRadius: "5px",
+    borderRadius: "8px",
     color: "white",
     fontSize: "16px",
     cursor: "pointer",
-    transition: "background-color 0.3s",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
+    transition: "background-color 0.3s, transform 0.2s",
+    flex: "1 1 200px",
   },
   buttonPrimary: {
-    backgroundColor: "#4CAF50", // Green color for primary button
+    backgroundColor: "#4CAF50",
   },
   buttonError: {
-    backgroundColor: "#FF5733", // Red color for errors button
+    backgroundColor: "#FF5733",
   },
   buttonWarning: {
-    backgroundColor: "#FFC300", // Yellow color for warnings button
+    backgroundColor: "#FFC300",
   },
   buttonBoth: {
-    backgroundColor: "#8E44AD", // Purple color for errors & warnings button
+    backgroundColor: "#8E44AD",
   },
   logPreview: {
     flexGrow: 1,
     width: "95%",
-    padding: "20px",
+    padding: "10px",
     border: "2px dotted green",
+    backgroundColor: "white",
+    borderRadius: "10px",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
   },
 };
 
