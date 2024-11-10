@@ -1,12 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { saveAs } from "file-saver";
-import { VariableSizeList as List } from "react-window"; // For variable-sized rows
+import { AutoSizer, List } from "react-virtualized"; // For auto-sizing rows
 
 function LogErrorHighlighter() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("All");
-  const listRef = useRef(null);
 
   const colors = {
     error: "#ffcccc", // Light red for errors
@@ -75,10 +74,10 @@ function LogErrorHighlighter() {
     return false;
   });
 
-  // Adjusts each row height based on the content length
-  const getItemSize = (index) => {
+  // Calculate row height dynamically based on content
+  const getRowHeight = ({ index }) => {
     const lineLength = filteredLogs[index].line.length;
-    return Math.max(40, Math.ceil(lineLength / 100) * 20); // Dynamically adjust height
+    return Math.max(40, Math.ceil(lineLength / 100) * 20); // Adjust height based on line length
   };
 
   const Row = ({ index, style }) => (
@@ -88,6 +87,7 @@ function LogErrorHighlighter() {
         backgroundColor: filteredLogs[index].highlight ? filteredLogs[index].color : "transparent",
         padding: "10px",
         borderRadius: "5px",
+        boxSizing: "border-box",
       }}
     >
       {filteredLogs[index].line}
@@ -154,15 +154,17 @@ function LogErrorHighlighter() {
 
       <div style={styles.logPreview}>
         <h3>Log Preview:</h3>
-        <List
-          ref={listRef}
-          height={window.innerHeight - 250} // Adjust height dynamically to occupy available space
-          itemCount={filteredLogs.length}
-          itemSize={getItemSize} // Dynamic height
-          width={"100%"}
-        >
-          {Row}
-        </List>
+        <AutoSizer>
+          {({ height, width }) => (
+            <List
+              height={height}
+              width={width}
+              rowCount={filteredLogs.length}
+              rowHeight={getRowHeight} // Dynamic height for each row
+              rowRenderer={({ index, key, style }) => <Row key={key} index={index} style={style} />}
+            />
+          )}
+        </AutoSizer>
       </div>
     </div>
   );
@@ -172,7 +174,7 @@ const styles = {
   container: {
     textAlign: "center",
     padding: "20px",
-    height: "100vh",
+    height: "900vh",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -231,10 +233,7 @@ const styles = {
   logPreview: {
     flexGrow: 1,
     width: "100%",
-    border: "1px solid #ddd",
-    borderRadius: "8px",
     padding: "20px",
-    overflow: "auto",
   },
 };
 
